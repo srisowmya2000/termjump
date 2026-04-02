@@ -5,6 +5,7 @@ Built on prompt_toolkit for full terminal/mouse support.
 
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.document import Document
 from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
@@ -12,6 +13,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
 from prompt_toolkit.mouse_events import MouseEventType
+from prompt_toolkit.output.color_depth import ColorDepth
 import sys
 
 
@@ -55,13 +57,12 @@ def tokenize_command(text):
     return tokens
 
 
-def run_editor(initial_command: str) -> str | None:
+def run_editor(initial_command: str):
     result_holder = {"command": None, "cancelled": False}
 
-    from prompt_toolkit.document import Document
     buf = Buffer(
         name="main",
-        initial_document=Document(initial_command, cursor_position=len(initial_command)),
+        document=Document(initial_command, cursor_position=len(initial_command)),
         multiline=False,
     )
 
@@ -108,7 +109,6 @@ def run_editor(initial_command: str) -> str | None:
         ])
     )
 
-    from prompt_toolkit.output.color_depth import ColorDepth
     app = Application(
         layout=layout,
         key_bindings=kb,
