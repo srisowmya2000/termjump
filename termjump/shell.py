@@ -1,28 +1,30 @@
 """
 Generates shell integration scripts for termjump.
-Usage: termjump init   → prints zsh snippet to eval
 """
 
 ZSH_WIDGET = r"""
 # ── termjump zsh integration ─────────────────────────────────────────────────
 _termjump_widget() {
   local current_cmd="$BUFFER"
+  local tmpfile=$(mktemp /tmp/termjump_XXXXXX)
 
-  # Run the editor; capture output
-  local edited
-  edited=$(termjump-edit "$current_cmd" </dev/tty 2>/dev/tty)
+  # Run in a subshell that has full tty access
+  termjump-edit "$current_cmd" > "$tmpfile" 2>/dev/null
   local exit_code=$?
 
-  if [[ $exit_code -eq 0 && -n "$edited" ]]; then
-    BUFFER="$edited"
-    CURSOR=${#BUFFER}
+  if [[ $exit_code -eq 0 ]]; then
+    local edited=$(cat "$tmpfile")
+    if [[ -n "$edited" ]]; then
+      BUFFER="$edited"
+      CURSOR=${#BUFFER}
+    fi
   fi
 
+  rm -f "$tmpfile"
   zle redisplay
 }
 
 zle -N _termjump_widget
-# Bind to Ctrl+E  (change to taste)
 bindkey '^E' _termjump_widget
 # ─────────────────────────────────────────────────────────────────────────────
 """

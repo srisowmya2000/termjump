@@ -1,32 +1,10 @@
 """
-termjump editor — click any character to jump cursor there.
-Built on prompt_toolkit for full terminal/mouse support.
+termjump editor — curses based, works inside zsh widgets on macOS.
 """
 
-from prompt_toolkit import Application
-from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.document import Document
-from prompt_toolkit.layout.containers import HSplit, Window
-from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
-from prompt_toolkit.layout.layout import Layout
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.styles import Style
-from prompt_toolkit.mouse_events import MouseEventType
-from prompt_toolkit.output.color_depth import ColorDepth
 import sys
-
-
-STYLE = Style.from_dict({
-    "status":        "bg:#1a1a2e fg:#7c83fd bold",
-    "status.key":    "bg:#1a1a2e fg:#e2e8f0",
-    "token.cmd":     "fg:#ffa657 bold",
-    "token.flag":    "fg:#3fb950",
-    "token.string":  "fg:#d2a8ff",
-    "token.path":    "fg:#79c0ff",
-    "token.default": "fg:#e6edf3",
-    "header":        "bg:#0d1117 fg:#484f58",
-})
+import os
+import curses
 
 
 def tokenize_command(text):
@@ -43,85 +21,126 @@ def tokenize_command(text):
         s, e = m.start(), m.end()
         tok = m.group(0)
         if m.group(1) or m.group(2):
-            cls = "token.string"
+            cls = "string"
         elif m.group(3):
-            cls = "token.flag"
-        elif "/" in tok or tok.endswith((".conf", ".json", ".yaml", ".toml", ".sh", ".py")):
-            cls = "token.path"
+            cls = "flag"
+        elif "/" in tok or tok.endswith((".conf",".json",".yaml",".toml",".sh",".py")):
+            cls = "path"
         elif first:
-            cls = "token.cmd"
+            cls = "cmd"
         else:
-            cls = "token.default"
+            cls = "default"
         tokens.append((s, e, cls))
         first = False
     return tokens
 
 
 def run_editor(initial_command: str):
-    result_holder = {"command": None, "cancelled": False}
+    result = {"command": None}
 
-    buf = Buffer(
-        name="main",
-        document=Document(initial_command, cursor_position=len(initial_command)),
-        multiline=False,
-    )
+    def _editor(stdscr):
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_YELLOW,  -1)
+        curses.init_pair(2, curses.COLOR_GREEN,   -1)
+        curses.init_pair(3, curses.COLOR_CYAN,    -1)
+        curses.init_pair(4, curses.COLOR_MAGENTA, -1)
+        curses.init_pair(5, curses.COLOR_WHITE,   -1)
+        curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_BLUE)
 
-    kb = KeyBindings()
+        COLOR = {
+            "cmd":     curses.color_pair(1) | curses.A_BOLD,
+            "flag":    curses.color_pair(2),
+            "path":    curses.color_pair(3),
+            "string":  curses.color_pair(4),
+            "default": curses.color_pair(5),
+        }
 
-    @kb.add("enter")
-    def accept(event):
-        result_holder["command"] = buf.text
-        event.app.exit()
+        curses.curs_set(1)
+        curses.mousemask(curses.ALL_MOUSE_EVENTS)
+        stdscr.keypad(True)
 
-    @kb.add("escape")
-    @kb.add("c-c")
-    def cancel(event):
-        result_holder["cancelled"] = True
-        event.app.exit()
+        buf = list(initial_command)
+        pos = len(buf)
 
-    @kb.add("c-a")
-    def go_home(event):
-        buf.cursor_position = 0
+        while True:
+            stdscr.clear()
+            rows, cols = stdscr.getmaxyx()
 
-    @kb.add("c-e")
-    def go_end(event):
-        buf.cursor_position = len(buf.text)
+            header = "  ● termjump — ENTER confirm  ESC cancel  ^A start  ^E end  click to jump"
+            stdscr.attron(curses.color_pair(6))
+            stdscr.addstr(0, 0, header[:cols].ljust(cols))
+            stdscr.attroff(curses.color_pair(6))
 
-    def get_status():
-        pos = buf.cursor_position
-        total = len(buf.text)
-        return HTML(
-            f'<status>  termjump </status>'
-            f'<status.key>  col <b>{pos}</b>/{total}  </status.key>'
-            f'<status.key>  ENTER confirm · ESC cancel · click to jump  </status.key>'
-        )
+            text = "".join(buf)
+            tokens = tokenize_command(text)
+            char_color = [COLOR["default"]] * len(text)
+            for s, e, cls in tokens:
+                for i in range(s, e):
+                    char_color[i] = COLOR.get(cls, COLOR["default"])
 
-    def mouse_handler(mouse_event):
-        if mouse_event.event_type == MouseEventType.MOUSE_UP:
-            col = mouse_event.position.x
-            buf.cursor_position = min(col, len(buf.text))
+            stdscr.addstr(1, 0, "  ")
+            for i, ch in enumerate(text):
+                if 2 + i >= cols - 1:
+                    break
+                stdscr.addstr(1, 2 + i, ch, char_color[i])
 
-    layout = Layout(
-        HSplit([
-            Window(FormattedTextControl(HTML('<header>  ● termjump — smart command editor</header>')), height=1),
-            Window(BufferControl(buffer=buf, focusable=True, mouse_handler=mouse_handler), height=1, style="bg:#0d1117 fg:#e6edf3"),
-            Window(FormattedTextControl(get_status), height=1),
-        ])
-    )
+            status = f"  col {pos}/{len(buf)}  |  arrows move  ^A start  ^E end"
+            stdscr.attron(curses.color_pair(7))
+            stdscr.addstr(2, 0, status[:cols].ljust(cols))
+            stdscr.attroff(curses.color_pair(7))
 
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        style=STYLE,
-        mouse_support=True,
-        full_screen=False,
-        color_depth=ColorDepth.TRUE_COLOR,
-    )
-    app.run()
+            stdscr.move(1, min(2 + pos, cols - 1))
+            stdscr.refresh()
 
-    if result_holder["cancelled"]:
-        return None
-    return result_holder["command"]
+            ch = stdscr.getch()
+
+            if ch in (curses.KEY_ENTER, 10, 13):
+                result["command"] = "".join(buf)
+                break
+            elif ch == 27:
+                break
+            elif ch == curses.KEY_LEFT and pos > 0:
+                pos -= 1
+            elif ch == curses.KEY_RIGHT and pos < len(buf):
+                pos += 1
+            elif ch == 1:
+                pos = 0
+            elif ch == 5:
+                pos = len(buf)
+            elif ch in (curses.KEY_BACKSPACE, 127) and pos > 0:
+                buf.pop(pos - 1)
+                pos -= 1
+            elif ch == curses.KEY_DC and pos < len(buf):
+                buf.pop(pos)
+            elif ch == curses.KEY_MOUSE:
+                try:
+                    _, mx, my, _, _ = curses.getmouse()
+                    if my == 1:
+                        pos = min(max(mx - 2, 0), len(buf))
+                except curses.error:
+                    pass
+            elif 32 <= ch <= 126:
+                buf.insert(pos, chr(ch))
+                pos += 1
+
+    old_stdin  = os.dup(0)
+    old_stdout = os.dup(1)
+    tty = os.open("/dev/tty", os.O_RDWR)
+    os.dup2(tty, 0)
+    os.dup2(tty, 1)
+    os.close(tty)
+
+    try:
+        curses.wrapper(_editor)
+    finally:
+        os.dup2(old_stdin,  0)
+        os.dup2(old_stdout, 1)
+        os.close(old_stdin)
+        os.close(old_stdout)
+
+    return result["command"]
 
 
 def main():
@@ -129,7 +148,8 @@ def main():
     edited = run_editor(initial)
     if edited is None:
         sys.exit(1)
-    print(edited, end="")
+    sys.stdout.write(edited)
+    sys.stdout.flush()
     sys.exit(0)
 
 

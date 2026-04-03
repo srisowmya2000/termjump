@@ -4,15 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "termjump"
-version = "0.1.0"
+version = "0.1.1"
 description = "Click-to-position terminal command editor for zsh"
 readme = "README.md"
-license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [
-  { name = "Your Name", email = "you@example.com" }
+  { name = "Srisowmya Nemani", email = "srisowmyanemani@gmail.com" }
 ]
 keywords = ["terminal", "cli", "zsh", "editor", "readline", "cursor"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Terminals",
+  "Topic :: Utilities",
+]
 dependencies = [
   "prompt_toolkit>=3.0.0",
 ]
@@ -22,8 +34,9 @@ termjump      = "termjump.cli:termjump_main"
 termjump-edit = "termjump.cli:termjump_edit_main"
 
 [project.urls]
-Homepage  = "https://github.com/srisowmya2000/termjump"
+Homepage   = "https://github.com/srisowmya2000/termjump"
 Repository = "https://github.com/srisowmya2000/termjump"
+Issues     = "https://github.com/srisowmya2000/termjump/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
